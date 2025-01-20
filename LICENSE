@@ -1,21 +1,55 @@
-MIT License
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-Copyright (c) 2025 Ricky Amaya
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+contract FeedTheCharityNFT is ERC721Enumerable, Ownable {
+    uint256 public constant PRICE = 0.2 ether; // Price per NFT in ETH
+    uint256 public constant MAX_SUPPLY = 500; // Total NFTs available
+    address public immutable charityWallet; // Address to receive charity royalties
+    string private baseURI; // Base URI for metadata
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+    constructor(address _charityWallet, string memory _baseURI) ERC721("FeedTheCharity", "FTC") {
+        require(_charityWallet != address(0), "Invalid charity wallet");
+        charityWallet = _charityWallet;
+        baseURI = _baseURI;
+    }
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+    /**
+     * @notice Mint an NFT by paying the fixed price.
+     */
+    function mint() external payable {
+        require(totalSupply() < MAX_SUPPLY, "All NFTs are sold");
+        require(msg.value == PRICE, "Incorrect ETH amount");
+
+        uint256 tokenId = totalSupply() + 1;
+        _safeMint(msg.sender, tokenId);
+
+        // Forward payment to the owner's wallet
+        payable(owner()).transfer(msg.value);
+    }
+
+    /**
+     * @notice Override for base URI used in metadata.
+     */
+    function _baseURI() internal view override returns (string memory) {
+        return baseURI;
+    }
+
+    /**
+     * @notice Update base URI (Owner only).
+     */
+    function setBaseURI(string memory _newBaseURI) external onlyOwner {
+        baseURI = _newBaseURI;
+    }
+
+    /**
+     * @notice Resale royalty distribution (10% to charity).
+     */
+    function royaltyInfo(uint256 /*tokenId*/, uint256 salePrice) external view returns (address receiver, uint256 royaltyAmount) {
+        uint256 royalty = (salePrice * 10) / 100; // 10% royalty
+        return (charityWallet, royalty);
+    }
+}
